@@ -513,6 +513,7 @@
         <p>Fill this out and we'll follow up to confirm availability, pricing for your exact address, and a delivery time.</p>
       </div>
       <form id="rentalForm" novalidate>
+        <input type="hidden" name="_subject" value="New Totes Better rental request">
         <div class="grid2">
           <div class="field">
             <label for="name">Full name</label>
@@ -565,10 +566,10 @@
           <textarea id="notes" name="notes" placeholder="Anything that helps us plan delivery and pickup"></textarea>
         </div>
         <div class="form-foot">
-          <p class="form-note">Submitting opens an email to our team with your request pre-filled — we'll reply to confirm pricing and scheduling.</p>
-          <button type="submit" class="btn btn-primary">Send rental request</button>
+          <p class="form-note">Submitting sends your request straight to our team — no email app required. We'll reply to confirm pricing and scheduling.</p>
+          <button type="submit" class="btn btn-primary" id="submitBtn">Send rental request</button>
         </div>
-        <div class="confirm" id="confirmMsg">Your email app should now be open with your request filled in. Didn't open? Email us directly at <a href="mailto:hello@totesbetter.com" style="text-decoration:underline;">hello@totesbetter.com</a> or call/text <a href="tel:14055550134" style="text-decoration:underline;">(405) 555-0134</a>.</div>
+        <div class="confirm" id="confirmMsg"></div>
       </form>
     </div>
   </section>
@@ -629,18 +630,19 @@
     }
   });
 
+  // ---- Form backend config ----
+  // Sign up free at https://formspree.io, create a form, and paste its ID below
+  // (Formspree gives you a URL like https://formspree.io/f/xxxxabcd — the part
+  // after /f/ is the ID). Leave FORM_ENDPOINT set from that ID.
+  var FORMSPREE_FORM_ID = 'YOUR_FORM_ID'; // <-- replace this
+  var FORM_ENDPOINT = 'https://formspree.io/f/' + FORMSPREE_FORM_ID;
+
   var form = document.getElementById('rentalForm');
   var confirmMsg = document.getElementById('confirmMsg');
-  form.addEventListener('submit', function (e) {
-    e.preventDefault();
-    if (!form.checkValidity()) { form.reportValidity(); return; }
-    var d = new FormData(form);
-    var lines = [
-      'New rental request',
-      '',
-      'Name: ' + d.get('name'),
-      'Phone: ' + d.get('phone'),
-      'Email: ' + d.get('email'),
+  var submitBtn = document.getElementById('submitBtn');
+
+  function buildSummary(d) {
+    return [
       'Delivery address: ' + d.get('deliveryAddr'),
       'Pickup address: ' + (d.get('pickupAddr') || 'same as delivery'),
       'Preferred delivery date: ' + d.get('deliveryDate'),
@@ -650,13 +652,48 @@
       'Packing supply kit: ' + (d.get('addTape') ? 'yes' : 'no'),
       'Moving blankets: ' + (d.get('addBlankets') ? (d.get('blanketQty') + ' blankets') : 'no'),
       'Stretch wrap: ' + (d.get('addWrap') ? (d.get('wrapQty') + ' roll(s)') : 'no'),
-      '',
       'Notes: ' + (d.get('notes') || '—')
-    ];
+    ].join('\n');
+  }
+
+  function mailtoFallback(d) {
+    var lines = ['New rental request', '', 'Name: ' + d.get('name'), 'Phone: ' + d.get('phone'), 'Email: ' + d.get('email'), '', buildSummary(d)];
     var body = encodeURIComponent(lines.join('\n'));
     var subject = encodeURIComponent('Rental request — ' + d.get('name'));
     window.location.href = 'mailto:hello@totesbetter.com?subject=' + subject + '&body=' + body;
-    confirmMsg.classList.add('show');
+  }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (!form.checkValidity()) { form.reportValidity(); return; }
+    var d = new FormData(form);
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Sending…';
+
+    fetch(FORM_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json' },
+      body: d
+    }).then(function (res) {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Send rental request';
+      if (res.ok) {
+        form.reset();
+        confirmMsg.textContent = "Thanks — your request is in! We'll follow up by phone or email shortly to confirm pricing and scheduling.";
+        confirmMsg.classList.add('show');
+      } else {
+        confirmMsg.textContent = "That didn't go through automatically, so we've opened an email with your request filled in instead — just hit send.";
+        confirmMsg.classList.add('show');
+        mailtoFallback(d);
+      }
+    }).catch(function () {
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Send rental request';
+      confirmMsg.textContent = "That didn't go through automatically, so we've opened an email with your request filled in instead — just hit send.";
+      confirmMsg.classList.add('show');
+      mailtoFallback(d);
+    });
   });
 </script>
 </body>
